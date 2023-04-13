@@ -1,0 +1,75 @@
+pragma solidity ^0.8.0;
+
+contract DAO {
+    mapping(address => uint256) public shares;
+    uint256 public totalShares;
+    mapping(address => bool) public votingRights;
+    uint256 public minimumQuorum;
+    uint256 public debatingPeriodInMinutes;
+    uint256 public lastMotion;
+    uint256 public voteCount;
+    uint256 public quorum;
+    uint256 public threshold;
+    address public admin;
+    string public proposal;
+    mapping(address => bool) public voted;
+    mapping(uint256 => mapping(address => bool)) public votedByMotion;
+    bool public proposalPassed;
+
+    event Proposal(address indexed recipient, uint256 indexed amount, string description);
+    event Voted(address indexed voter, uint256 indexed motionId, bool indexed vote);
+    event ProposalTallied(uint256 indexed motionId, uint256 indexed yeas, uint256 indexed nays);
+
+    constructor(uint256 _minimumSharesForVoting, uint256 _debatingPeriodInMinutes) public {
+        minimumQuorum = _minimumSharesForVoting;
+        debatingPeriodInMinutes = _debatingPeriodInMinutes;
+        admin = msg.sender;
+    }
+
+    function addShareholder(address shareholder, uint256 sharesToAdd) public {
+        require(msg.sender == admin, "Only the admin can add shareholders.");
+        require(sharesToAdd > 0, "Shares to add must be greater than zero.");
+        shares[shareholder] += sharesToAdd;
+        totalShares += sharesToAdd;
+        votingRights[shareholder] = true;
+    }
+
+    function startMotion(string memory _proposal) public {
+        require(shares[msg.sender] > 0, "Must have at least one share to create a motion.");
+        require(lastMotion + debatingPeriodInMinutes * 1 minutes < block.timestamp, "Must wait for debating period to expire.");
+        lastMotion = block.timestamp;
+        proposal = _proposal;
+        voteCount = 0;
+        quorum = 0;
+        threshold = 0;
+        proposalPassed = false;
+        for (uint256 i = 0; i < totalShares; i++) {
+            address shareholder = address(i);
+            if (votingRights[shareholder]) {
+                voted[shareholder] = false;
+            }
+        }
+    }
+
+    function vote(uint256 motionId, bool supportsProposal) public {
+        require(votingRights[msg.sender], "You do not have voting rights.");
+        require(lastMotion + debatingPeriodInMinutes * 1 minutes >= block.timestamp, "Voting period has ended.");
+        require(!voted[msg.sender], "You have already voted.");
+        require(!votedByMotion[motionId][msg.sender], "You have already voted on this motion.");
+        voted[msg.sender] = true;
+        votedByMotion[motionId][msg.sender] = true;
+        voteCount += shares[msg.sender];
+        if (supportsProposal) {
+            threshold += shares[msg.sender];
+        }
+        quorum = voteCount * 100 / totalShares;
+        emit Voted(msg.sender, motionId, supportsProposal);
+    }
+
+    function tallyVotes(uint256 motionId) public {
+        require(lastMotion + debatingPeriodInMinutes * 1 minutes < block.timestamp, "Must wait for debating period to expire.");
+        require(!proposalPassed, "Proposal has already passed.");
+        if (quorum < minimumQuorum) {
+            proposalPassed = false;
+            emit ProposalTallied(motionId, threshold, voteCount - threshold);
+        } else if (threshold > voteCount / 
